@@ -1,0 +1,164 @@
+
+
+function [handles] = updateGUIwithLoadedParams(handles, hObject)
+
+
+set(handles.textDataAvailabilty,'String','DATA: NOT Available');
+set(handles.editSampleTime,'String',handles.SimParams.SampleTime);
+set(handles.editXYRes,'String',handles.SimParams.xyResolution);
+set(handles.editSimulationTime,'String',handles.SimParams.SimulationTime);
+set(handles.checkboxAvoidObs,'Value',handles.BatFlightParams.AvoidObsFlag);
+set(handles.checkboxIsPrey,'Value',handles.SimParams.IsPreyFlag);
+set(handles.editPreysNumber,'Value',handles.SimParams.TotalPreysNumber);
+set(handles.editBatsNumber,'Value',handles.SimParams.TotalBatsNumber);
+
+set(handles.popupmenu_TestMode, 'Value', find(strcmp(handles.popupmenu_TestMode.String, handles.SimParams.TestMode)) );
+
+set(handles.editXroom,'String',handles.TerrainParams.Xmax);
+set(handles.editYroom,'String',handles.TerrainParams.Ymax);
+set(handles.editZroom,'String',handles.TerrainParams.Zmax);
+set(handles.edit_swarm_start_pos_std, 'String', handles.SimParams.swarm_initial_ybat_std);
+
+% set(handles.popupmenuEnvironment,'Value',2); % Empty Room
+[handles.Terrain, handles.TerrainParams.Xmax,...
+    handles.TerrainParams.Ymax, handles.TerrainParams.Zmax,...
+    handles.TerrainParams.Xmin, handles.TerrainParams.Ymin, handles.TerrainParams.Zmin] = ...
+    BuildEnvironment(handles.TerrainParams, handles.SimParams.xyResolution,handles.TerrainParams.Type);
+set(handles.editZroom,'String',handles.TerrainParams.Zmax);
+set(handles.editXroom,'String',handles.TerrainParams.Xmax);
+set(handles.editYroom,'String',handles.TerrainParams.Ymax);
+set(handles.popupmenuEnvironment, 'Value',find(strcmp(handles.popupmenuEnvironment.String, handles.TerrainParams.Type)));
+ 
+if strcmp(handles.TerrainParams.Type, 'Free Space')
+    set(handles.editXroom,'Enable', 'off');
+    set(handles.editYroom,'Enable', 'off');
+    set(handles.editZroom,'Enable', 'off');
+end % if
+  
+set(handles.editBatsNumber,  'String',handles.SimParams.TotalBatsNumber);
+set(handles.editPreysNumber, 'String',handles.SimParams.TotalPreysNumber);
+
+% Bat Behavior
+set(handles.checkboxDetectPrey,    'Value',handles.SimParams.DetectPrey);
+set(handles.checkboxDetectClutter, 'Value',handles.SimParams.DetectObs);
+set(handles.checkboxDetectConsps,  'Value',handles.SimParams.DetectConsps);
+
+% BatFlighParams
+set(handles.editMaxVelocity,    'String',handles.BatFlightParams.MaxVelocity);
+set(handles.editNominalVelocity,'String',handles.BatFlightParams.NominalVelocity);
+set(handles.editMaxAccel,       'String',handles.BatFlightParams.MaxAccelaration);
+set(handles.editNominalAccel,   'String',handles.BatFlightParams.NominalAccel);
+% set(handles.checkboxPreyHunting,'Value',handles.BatFlightParams.PreyHuntingFlag);            
+set(handles.popupmenuFlightType,'Value',find(strcmp(handles.popupmenuFlightType.String, handles.BatFlightParams.FlightTypeFlag)) );
+ 
+
+% BatSonarParams
+set(handles.editBeamWidth,'String',handles.BatSonarParams.BatBeamWidth);
+set(handles.editDetectRange,'String',handles.BatSonarParams.BatDetectionRange);
+set(handles.editTransmitPower,'String',handles.BatSonarParams.PulsePower);
+set(handles.editPRFMin,'String',handles.BatSonarParams.BatNominalPRF);
+set(handles.editPRFMax,'String',handles.BatSonarParams.BatMaxPRF);
+set(handles.editPulseTimeMin,'String',handles.BatSonarParams.PulseTimeShort);
+set(handles.editPulseTimeMax,'String',handles.BatSonarParams.PulseTimeLong);
+set(handles.editCenterFreq,'String',handles.BatSonarParams.CenterFreq);
+set(handles.edit58_PulseDetectionTH,'String',handles.BatSonarParams.PulseDetectionTH);
+% set(handles.editPulsePower,'String',handles.BatSonarParams.PulsePower);
+set(handles.edit59_NoiseLeveldB,'String',handles.BatSonarParams.NoiseLeveldB);
+set(handles.edit42TargetWingLength,'String',handles.BatSonarParams.TargetWingLength);
+set(handles.checkbox_MissDetectionProbFlag,'Value',handles.BatSonarParams.MissDetectionProbFlag);
+set(handles.edit43_ProbToDetect,'String',handles.BatSonarParams.ProbToDetect);
+% set(handles.edit45DetectionTHdB,'String',handles.BatSonarParams.PulseDetectionTH);
+% set(handles.edit46_MemorySize,'String',handles.BatFlightParams.HuntedMemorySize);
+% set(handles.edit47_MemoryKHunted,'String',handles.BatFlightParams.NumOfSamePreyForAppraoach);
+set(handles.edit48_SIRneededTH,'String',handles.BatSonarParams.Signal2InterferenceRatio);
+set(handles.edit49_FwdMaskingTH,'String',handles.BatSonarParams.MaskingFwdSIRth);
+set(handles.edit50_FwdMakingTime,'String',handles.BatSonarParams.MaskingFwdTime);
+set(handles.edit51_MinPulsePower,'String',handles.BatSonarParams.PulseMinPower);
+
+set(handles.edit68_ObsMemSize,'String',handles.BatSonarParams.ObsMemorySize);
+
+set(handles.edit52_Dist2Buzz,'String',handles.BatFlightParams.DistanceToBuzz);
+set(handles.edit53_Dist2Appraoch,'String',handles.BatFlightParams.DistanceFromPreyToApproach);
+set(handles.edit54_BatMinVelocity,'String',handles.BatFlightParams.MinVelocity);
+set(handles.checkbox29_LocalizationErrFlag, 'Value', handles.BatSonarParams.LocalizationErrFlag);
+
+set(handles.checkbox37_MaskingByConsps, 'Value', handles.SimParams.MaskingByConsps);
+set(handles.checkbox38_MaskingByClutter, 'Value', handles.SimParams.MaskingByClutter);
+set(handles.radiobutton28_Acoustics, 'Value', handles.SimParams.AcousticsCalcFlag);
+
+%%% Obs confusion Params New June2024
+if isfield(handles.BatSonarParams, 'ConfusionObs')
+    set(handles.checkbox54, 'Value', handles.BatSonarParams.ConfusionObs);
+else
+    set(handles.checkbox54, 'Value', 0);
+end
+if isfield(handles.BatSonarParams, 'ObsClusterFlag')
+    set(handles.checkbox54, 'Value', handles.BatSonarParams.ObsClusterFlag);
+    set(handles.edit73, 'String', num2str(handles.BatSonarParams.minClusterTH));
+else
+    set(handles.checkbox56, 'Value', 0);
+    set(handles.edit73, 'Value', 0);
+end
+
+% handles.popupmenuReceiverType.Value =  find(strcmp(handles.popupmenuReceiverType.String, handles.BatSonarParams.ReceiverType) );
+handles.popupmenu_receiverType.Value =  find(strcmp(handles.popupmenu_receiverType.String, handles.BatSonarParams.ReceiverType) );
+% set(handles.popupmenuReceiverType,'String',handles.BatSonarParams.ReceiverType);
+
+
+% PreyFlightParams
+set(handles.editPreyMaxVelocity,'String',handles.PreyFlightParams.PmaxVelocity);
+set(handles.editPreyNominalVelocity,'String',handles.PreyFlightParams.PNominalVelocity);
+set(handles.editPreyMaxAccelaration,'String',handles.PreyFlightParams.PMaxAccelaration);
+set(handles.editPreyNominalAccel,'String',handles.PreyFlightParams.PNominalAccel);
+set(handles.popupmenuPreyFlightType, 'Value', find(strcmp(handles.popupmenuPreyFlightType.String, handles.PreyFlightParams.PFlightTypeFlag)) );    
+set(handles.checkbox_JamMothFlg, 'Value', handles.PreyFlightParams.React2BatsFlag);
+set(handles.edit_jamMothTxLvl, 'String', handles.PreyFlightParams.JamTxLvl);
+% multi Prey an Bats
+handles.DataToPlot.PlotAllPreysFlag = handles.checkbox19AllPreysPlot.Value;
+handles.DataToPlot.PlotAllBatsFlag = handles.checkboxAllBatsPlot.Value;
+handles.edit18BatNumToPlot.Value = 1;
+handles.DataToPlot.BatNumToPlot = handles.edit18BatNumToPlot.Value;
+handles.edit40PreyNumToPlot.Value = 1;
+handles.DataToPlot.PreyNumToPlot = handles.edit40PreyNumToPlot.Value;
+% X-Y Plot Paramsha
+ handles.DataToPlot.PreyPositionFlag = handles.radiobuttonPeryPosFLag.Value;
+ handles.DataToPlot.TerrainFlag = handles.radiobuttonTerrain.Value; 
+ handles.DataToPlot.BatPosFlag = handles.radiobuttonBatPos.Value;
+ handles.DataToPlot.SonarPosFlag = handles.radiobuttonSonarPos.Value;
+ handles.DataToPlot.ManPosFlag = handles.radiobuttonManuevresPos.Value;
+ handles.DataToPlot.TerrainFindFlag = handles.radiobuttonTerrainFind.Value;
+ handles.DataToPlot.EndTimeFilter = handles.editEndTime.Value;
+ handles.DataToPlot.StartTimeFilter = handles.editStartTime.Value;
+ handles.DataToPlot.TimeFilterFlag = handles.checkboxTimeFilter.Value;
+ handles.DataToPlot.CatchesPosFlag = handles.radiobuttonCatchesPositions.Value;
+ handles.DataToPlot.JamPreyPosFlag = handles.radiobutton_PreyJam.Value;
+ set(handles.checkboxHoldOn,'Value',1);
+ handles.handleXYBatPosLine =[];
+ % Time Plot Params
+ handles.DataToPlot.HuntingManuevers =  handles.radiobuttonHuntMan.Value;
+ handles.DataToPlot.FlightVelocity =  handles.radiobuttonFlightVelocity.Value; 
+ handles.DataToPlot.SonarTimes =  handles.radiobuttonSonarTimes.Value;
+ handles.DataToPlot.PulseDuration=  handles.radiobuttonPulseDur.Value;
+ handles.DataToPlot.SonarPulses =  handles.radiobuttonRadialACcel.Value;
+ handles.DataToPlot.PRFVec = handles.radiobuttonPRFVec.Value;
+ handles.DataToPlot.Bat2PreyDistFlag = handles.radiobuttonBat2PreyDistFlag.Value ;
+ handles.DataToPlot.Bat2PreyAngleFlag =  handles.radiobutton15Bat2PreyAngleFlag.Value;
+ handles.DataToPlot.PreyFindsFlag = handles.radiobuttonPreyFindsFlag.Value;
+ handles.DataToPlot.BatAllPulsesFlag = handles.radiobuttonAllSonarPulses.Value;
+ handles.DataToPlot.ObsEchosFlag = handles.radiobuttonObsEchos.Value;
+ handles.DataToPlot.InterferencePlotFlag =  handles.radiobutton20_PlotInterferenceFlag.Value;
+ handles.DataToPlot.PreyEchosFlag = handles.radiobuttonPreyEchos.Value;
+ handles.DataToPlot.ConspsEchosFlag = handles.radiobuttonConspsEchoesPlot.Value;
+ handles.DataToPlot.FlightVelocity = handles.radiobuttonFlightVelocity.Value;
+ set(handles.checkboxTimeHoldOn,'Value',1); 
+ hold(handles.TimePlot, 'on')
+
+ % Animation
+handles.SaveAminationFlag = 0;
+handles.AnimationTimeRate = 75;
+handles.AnimmateCurrentOnly = 0;
+handles.DataToPlot.AnimateStartTime = 0; % seconds
+handles.DataToPlot.AnimateEndTime = handles.SimParams.SimulationTime; %seconds
+% guidata(hObject,handles); % save the changes to the structure 
+
+guidata(hObject,handles); % save the changes to the structure 

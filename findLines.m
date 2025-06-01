@@ -1,0 +1,50 @@
+function [edges, polynomes] = findLines(sortedXEst, sortedYEst, distTH, minPoints)
+
+% this function get the postions points (sorted by thier angles, from right to left) and reurns
+% clusters of lines
+errTH = 0.2;
+
+edges = [];
+polynomes = [];
+distances = sqrt(sum(diff([sortedXEst', sortedYEst']).^2, 2));
+potentialEdges =  find(distances > distTH)+1;
+% add the first and last point 
+potentialEdges = [1; potentialEdges; numel(sortedXEst)];
+% potentialEdges = unique([1; potentialEdges; numel(sortedXEst)]);
+
+for k = 1:numel(potentialEdges)-1
+    kStart = potentialEdges(k);
+    kEnd = potentialEdges(k+1)-1;
+    % for the last group the End is the last point
+    if k == numel(potentialEdges)-1
+        kEnd = numel(sortedXEst);
+    end
+    if kEnd-kStart+1 >= minPoints
+        %%% the linear fit
+        
+        % Check if the edgesar same point (this can fappen becuase the
+        % detections of the last calls may be consedered twice (once in
+        % memroy and as last calls)
+        if kEnd-kStart == 1 && sortedXEst(kStart) == sortedXEst(kEnd)
+            continue
+        end
+        
+        % because walls may be vertical, the polyfit had poor results
+        % p = polyfit(sortedXEst(kStart:kEnd), sortedYEst(kStart:kEnd), 1);
+        p = fit_near_vertical_line(sortedXEst(kStart:kEnd)', sortedYEst(kStart:kEnd)');
+        edges = vertcat(edges, [kStart, kEnd]);
+        polynomes = vertcat(polynomes, p);
+
+        %% evaluate  the goodness of Fit by the MSE and totlaDistance
+        % y_fit = polyval(p, sortedXEst(kStart:kEnd));
+        % mse = sqrt( mean((sortedYEst(kStart:kEnd) - y_fit).^2) );
+        % dLine = sqrt((sortedXEst(kEnd) - sortedXEst(kStart))^2 + (sortedYEst(kStart) - sortedYEst(kEnd))^2 );
+        % % if the erroris less than the TH add the cluster to the detectedwall
+        % if mse/dLine < errTH
+        %     edges = vertcat(edges, [kStart, kEnd]);
+        %     polynomes = vertcat(polynomes, p);
+        % end
+    end
+end % for k
+
+

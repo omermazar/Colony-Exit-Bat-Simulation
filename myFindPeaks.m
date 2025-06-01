@@ -1,0 +1,58 @@
+function [pks, locs, prs] = myFindPeaks(x, MinPeakHeight, MinPeakDistance, MinPeakProminence)
+
+% calculate the peaks of the signal faster
+
+locs = find(x(2:end-1) >=x (1:end-2) & x(2:end-1) >=x (3:end))+1;
+pks  = x(locs); 
+
+% Min Height
+if nargin >= 2
+    ixH  = pks >= MinPeakHeight;
+    locs = locs(ixH);
+    pks  = x(locs);
+end
+
+% Min Dist
+if nargin >= 3
+    if MinPeakDistance > 1
+        while 1
+            del=diff(locs) < MinPeakDistance;
+            if ~any(del), break; end
+            pks          = x(locs);
+            [garb, mins] = min([pks(del) ; pks([false del])]); %#ok<ASGLU>
+            deln         = find(del);
+            deln         = [deln(mins==1) deln(mins==2)+1];
+            locs(deln)   = [];
+        end
+    end
+
+    pks  = x(locs); 
+end 
+
+% Min prominance
+if nargin >= 4
+    prs = nan(size(pks));
+    N = numel(x);
+    for k = 1:numel(pks)
+        iloc = locs(k);
+        ipk  = pks(k);
+        leftB = iloc - find(x(iloc-1:-1:1) >= ipk,1);
+        if isempty(leftB)
+            leftB = 1;
+        end
+        ref = min(x(leftB:iloc-1));
+        rightB = iloc + find(x(iloc+1:N) >= ipk,1);
+        if isempty(rightB)
+            rightB = N;
+        end
+        ref = max([ref, min(x(iloc+1:rightB))]);
+        prs(k) = ipk -ref;
+    end % for k
+    ixP = prs > MinPeakProminence;
+    locs = locs(ixP);
+    pks  = pks(ixP);
+    prs  = prs(ixP);
+end
+
+
+

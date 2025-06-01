@@ -1,0 +1,141 @@
+
+function [] = My_AcousticSig_VecTest (BatDATA, BatNum, axHandle, DetectedObj, startTime, endTime, extraPlotFlag)
+
+% input
+if nargin < 7
+    extraPlotFlag = 1;
+end
+if nargin < 6
+    endTime = inf; % sec
+    startTime = 0; % sec
+end
+if nargin < 4
+     DetectedObj = 'Prey'; % 'Prey'; 'Obs'; 'Conspecific'
+end
+if nargin < 3
+    fig = figure;
+    ax1 = gca; 
+    %     ax1 = subplot(2,1,1);
+    hold on; grid on
+else
+    ax1  = axHandle;
+    hold on; grid on
+end
+
+if nargin < 2 || strcmp(BatNum, 'all')
+    nBats = BatDATA.AllParams.SimParams.TotalBatsNumber;
+    BatNum = 1:nBats;
+end
+
+FsAcoustic = BatDATA.AllParams.SimParams.FsAcoustic;
+
+sampleTime = BatDATA.AllParams.SimParams.SampleTime;
+
+% BatNum = 3;
+
+plot_orig_flg =0; % plt tho orig sample time for test
+
+% set the colors
+switch DetectedObj
+    case 'Prey'
+        TestMode = 'foraging';
+    case 'Obs'
+        TestMode = 'caveExit';
+    case 'Conspecific'
+        TestMode = 'swarm';
+end % switch
+[colStruct] = myColorScheme(TestMode);
+
+
+for  k = BatNum 
+    BATx = BatDATA.BAT(k);
+    ts = (0:numel(BATx.AcousticSig_PreyEchoes)-1) * 1/FsAcoustic;
+    % plot only do
+    ix = ts > startTime & ts < endTime;
+    ts = ts(ix) - startTime;
+
+    if strcmp(BatNum, 'all')
+        figure
+        ax1 = gca;
+    end
+
+    
+    plot(ax1, ts, smooth(20*log10(abs(BATx.AcousticSig_Calls(ix))+1)), 'Color', colStruct.ownCalls, 'LineWidth', 1.5, 'DisplayName', 'own calls')
+    plot(ts, smooth(20*log10(abs(BATx.AcousticSig_ConspsCalls(ix))+1)),'Color', colStruct.conspsCalls, 'LineWidth', 1.5, 'DisplayName', 'consps calls')
+%     plot(ts, 20*log10(abs(BATx.AcousticSig_ConspsPreyEchoes)+1),'Color', [0.75 0 0], 'DisplayName', 'consps PreyE')
+    plot(ts, smooth(20*log10(abs(BATx.AcousticSig_ConspsObsEchoes(ix))+1)),'Color', colStruct.conspsObsEchoes,  'LineWidth', 1.5,'DisplayName', 'consps ObsE') % 'm' [146 36 40]./255
+    plot(ts, smooth(20*log10(abs(BATx.AcousticSig_ConspsConspsEchoes(ix))+1)),'Color', colStruct.conspsConspsEchoes,  'LineWidth', 1.5,'DisplayName', 'consps ConspsE')
+    plot(ts, smooth(20*log10(abs(BATx.AcousticSig_CospsEchoes(ix))+1)), 'Color', colStruct.conspsEchoes , 'LineWidth', 1.5, 'DisplayName', 'consps echos')
+    plot(ts, smooth(20*log10(abs(BATx.AcousticSig_Clutter(ix))+1)),'Color', colStruct.clutter ,  'LineWidth', 1.5, 'DisplayName', 'clutter')
+    plot(ts, smooth(20*log10(abs(BATx.AcousticSig_PreyEchoes(ix))+1)),'Color', colStruct.Prey, 'LineWidth', 1.5,  'DisplayName', 'prey')
+
+
+    % plot(ts, 20*log10(abs(BATx.AcousticSig_All)+1),'k', 'DisplayName', 'acous all')
+    legend
+    if plot_orig_flg
+        tb = (0:numel(BATx.InterferenceVec)-1) * sampleTime;
+        plot(tb, 10*log10(abs(BATx.BatSonarEchosMat(1,:))),'ko', 'DisplayName', 'all')
+        plot(tb, 10*log10(abs(BATx.AllInterPulses)),'ro', 'DisplayName', 'inter')
+        plot(tb, 10*log10(abs(BATx.PreyEchosVec)),'go', 'DisplayName', 'prey')
+        plot(tb, 10*log10(abs(BATx.ObsEchosVec)),'mo', 'DisplayName', 'clutter')
+        
+    end %if plot_orig_flg
+    
+    if extraPlotFlag
+        %% add pulse number
+
+        TxTimes = [BATx.TransmittedPulsesStruct.StartPulseTime] * sampleTime;
+        ix = TxTimes > startTime & TxTimes < endTime;
+        TxTimes = TxTimes(ix) - startTime;
+        allPulseNum = [BATx.TransmittedPulsesStruct.PulseNum];
+        allPulseNum = allPulseNum(ix);
+        t0 = text(-0.085*max(ts), -5, 'time:','FontSize', 8);
+        t1 = text(TxTimes, -10*ones(size(TxTimes)), string(allPulseNum),'FontSize', 8);
+        t2 = text(-0.15*max(ts), -10, 'PulseNum:','FontSize', 8);
+
+        %% Add Masked Signals
+        try
+            switch DetectedObj
+                case 'Prey'
+                    jammedTimes = BATx.InterReportStrctOnLine.TotalInterferenceTimes;
+                case 'Obs'
+                    jammedTimes = BATx.InterReportStrctOnLine.obsTotalInterferenceTimes;
+                case 'Conspecific'
+                    jammedTimes = BATx.InterReportStrctOnLine.conspsTotalInterferenceTimes;
+            end % switch
+        catch
+            warning('Detected Object not exists, Jamming was not plotted')
+            jammedTimes = [];
+        end % try
+        jammedTimes = jammedTimes(jammedTimes > startTime & jammedTimes < endTime) - startTime;
+        plot(jammedTimes, 40*ones(size(jammedTimes)), 'd', 'Color', colStruct.masking, 'DisplayName','jammed')
+        title(['BAT: ', num2str(k)])
+
+        %% Add Capture Times
+        CatchPreyTimes = BATx.CatchPreyTimes;
+        ix = CatchPreyTimes > startTime & CatchPreyTimes < endTime;
+        CatchPreyTimes = CatchPreyTimes(ix) - startTime;
+        if ~isempty(CatchPreyTimes)
+            plot( CatchPreyTimes, ones(size(CatchPreyTimes)) * BatDATA.AllParams.BatSonarParams.PulseMinPower,'+', ...
+                'Color', colStruct.catchPrey, MarkerSize',10,'linewidth',4);
+        end % if ~isempty(JammedTimes)
+    end % if extraPlotFlag
+    %% Spectrogram
+%     ax2 = subplot(2,1,2);
+%     spectrogram(BATx.AcousticSig_All, 128, 127, 127, BatDATA.AllParams.SimParams.FsAcoustic, 'yaxis', 'power', 'MinThreshold', 0);
+%     colorbar('off')
+%     colormap("jet")
+%     linkaxes([ax1, ax2])
+end % for BatNum
+
+% nSamples = numel(BATTrantmitter.TransmittedPulsesStruct(1).TxAcousticSig);
+% FsAcoustic = 200e3;
+% idx1 = round((TransmitStartTime + EchoDelayTimes_precise) * FsAcoustic * SampleTime);
+% 
+% EchoDetailed = struct('EchosnTimesFull', CurrentEchosInterTimes, 'EchoAttenuationFull', Attenuation);
+% 
+% Curr_Inter_Acoustic = ReconstractAcousticEcho(EchoDetailed, ...
+%    BATTrantmitter.TransmittedPulsesStruct(CurrPulseNum).TxAcousticSig, SampleTime, nSamples);
+% 
+% BATReciever.AcousticSig_CospsEchoes = Add_currEcho_to_full_vec( ...
+%                                 BATReciever.AcousticSig_CospsEchoes , Curr_Inter_Acoustic, idx1, nSamples);

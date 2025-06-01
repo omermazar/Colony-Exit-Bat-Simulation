@@ -1,0 +1,97 @@
+function [colStruct, colObj] = myColorScheme(Mode, nBats, nPreys, Object, plotFlag)
+
+%% Input: Mode 'foraging' (default) | 'swarm' | 'caveExit'
+%        Object
+if nargin < 5
+    plotFlag = false;
+end
+
+if nargin < 4
+    Object = 'Prey';
+end
+ 
+if nargin < 3
+    nPreys = 10;
+end
+
+if nargin < 2
+    nBats = 10;
+end
+
+
+if nargin < 1
+    Mode = 'foraging';
+end
+
+%% The colormap
+%%%% Acoustics
+colStruct.ownCalls           = [0 0 0]; % black
+colStruct.Prey               = [0.4660    0.6740    0.1880]; % green
+colStruct.conspsEchoes       = [0    0.4470    0.7410]; % blue
+colStruct.clutter            = [0.9290    0.6940    0.1250]; % yellow
+colStruct.conspsCalls        = [0.8500    0.3250    0.0980] ; % red
+colStruct.conspsObsEchoes    = 0.7*[ 1 1 1 ]; % grey
+colStruct.conspsConspsEchoes = [0.5928    0.2208    0.6672]; % purple
+colStruct.MaskingSignals     = [1 0 0]; % red
+
+%%%% XY and Animations
+% objects
+colStruct.Terrain  = [0 , 0 , 1];
+colStruct.BatPos   = lines(nBats);
+colStruct.SelectedBatPos = [0.9    0.9    0.250]; % yelow
+colStruct.PreysPos = lines(nPreys);
+% maskig color
+colStruct.masking = [1 0 0]; %red
+% manuvers
+colStruct.ForagingMan = [0 0 0]; %Black
+colStruct.Approach    = [ 0 1 0];  % Green
+colStruct.BuzzMan     = [ 0 0 0 ]; % black
+colStruct.ObsMan      = [0 1 0]; % Green
+colStruct.CaveExit    = [0 1 1]; %% cyan
+colStruct.AvoidBatMan = [1 1 0]; % Yellow;
+% detections
+colStruct.preyFinding   = [0 1 0]; % green
+colStruct.conspFinding  = [0 0.8 0]; % green
+colStruct.obsFinding    = [0 0.5 0]; % green
+colStruct.preyEstimate  = [0 1 0]; % green
+colStruct.conspEstimate = [0 0.8 0]; % green
+colStruct.obsEstimate   = [0 0.5 0]; % green
+
+%%%  events
+colStruct.xatchPrey = [ 0 0 0]; % black
+colStruct.crushes   = [0.6 0.6 0.6] ; % grey
+colStruct.detections= [0 1 0] ; % gren
+
+switch Mode
+    case 'foraging' 
+       colStruct.Prey         = [0.4660    0.6740    0.1880]; % green
+       colStruct.conspsEchoes = [0    0.4470    0.7410]; % blue
+       colStruct.clutter      = [0.9290    0.6940    0.1250]; % yellow
+        
+    case'swarm' 
+       colStruct.Prey         = [0    0.4470    0.7410]; % blue
+       colStruct.conspsEchoes = [0.4660    0.6740    0.1880]; % green
+       colStruct.clutter      = [0.9290    0.6940    0.1250]; % yellow
+
+    case 'caveExit'
+       colStruct.Prey         = [0    0.4470    0.7410]; % blue
+       colStruct.conspsEchoes = [0    0.4470    0.7410]; % blue
+       colStruct.clutter      = [0.4660    0.6740    0.1880]; % green
+end % switch
+
+if nargout >= 2
+    colObj = colStruct.(Object);
+end
+
+%% plot legend
+if plotFlag || nargout == 0
+    allCols = fields(colStruct);
+    figure
+    hold on
+    nCols = numel(allCols);
+    for k = 1: nCols
+        if ~ismember(allCols{k}, {'BatPos', 'PreysPos'} )
+        plot(1,nCols-k+1, 'o', 'MarkerFaceColor', colStruct.(allCols{k}), 'MarkerEdgeColor', 'non' )
+        text(1.5,nCols-k+1, allCols{k})
+    end % for k
+end % if plot flaf

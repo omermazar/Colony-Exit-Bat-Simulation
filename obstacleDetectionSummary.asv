@@ -1,0 +1,26 @@
+function [FindsAll] = obstacleDetectionSummary(BATx, AllParams)
+
+sampleTime   = AllParams.SimParams.SampleTime;
+xyResolution = AllParams.SimParams.xyResolution;
+nCalls       = BATx.NumOfTimesSonarTransmits;
+reqFindsStr
+FindsAll(nCalls) = struct();
+for k = 1:nCalls
+    nTime = BATx.TransmittedPulsesStruct(k).StartPulseTime;
+    FindsAll(k).PulseNum         = k;
+    FindsAll(k).nTime            = nTime;
+    FindsAll(k).t                = FindsAll(k).nTime*sampleTime;
+    FindsAll(k).detectetObs      = BATx.ObsFindsStruct(k).DetectedPreyNum;   
+    FindsAll(k).maskedObs        = BATx.ObsFindsStruct(k).MaskedPreys;  
+    FindsAll(k).xObsReal         = BATx.ObsFindsStruct(k).xFinds * xyResolution;  
+    FindsAll(k).yObsReal         = BATx.ObsFindsStruct(k).yFinds * xyResolution; 
+    FindsAll(k).xObsEstimated    = (BATx.xBati(nTime) + BATx.ObsFindsStruct(k).Distances .* cos(BATx.Teta(nTime) + BATx.ObsFindsStruct(k).Angles)) * xyResolution;  
+    FindsAll(k).yObsEstimated    = (BATx.yBati(nTime) + BATx.ObsFindsStruct(k).Distances .* sin(BATx.Teta(nTime) + BATx.ObsFindsStruct(k).Angles)) * xyResolution;
+    FindsAll(k).Distances        = BATx.ObsFindsStruct(k).Dist2DetectedPrey; 
+    FindsAll(k).DistanceErrs     = BATx.ObsFindsStruct(k).DetectionsRangeErr; 
+    FindsAll(k).Angles           = BATx.ObsFindsStruct(k).Angle2DetectedPrey; 
+    FindsAll(k).AnglesErrs       = BATx.ObsFindsStruct(k).DetectionsDFerror;
+    FindsAll(k).RxLevel          = BATx.ObsFindsStruct(k).RxPowerOfDetectedPreys;;
+    FindsAll(k).SIR              = BATx.Obs_MaskingStruct(k).DetecetedPrey2InterferenceRatioDB;
+   
+end

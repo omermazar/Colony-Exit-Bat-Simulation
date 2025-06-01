@@ -1,0 +1,170 @@
+function [tempManueverStage] = myManuverAnlysisPlot(BatDATA, BatNum, PulseNum, ax)
+
+if nargin < 4
+%     figure;
+    ax = gca; hold on;
+else
+
+end
+% set colors
+[colStruct] =  myColorScheme(BatDATA.AllParams.SimParams.TestMode);
+
+% BatNum   = 1;
+% PulseNum = 94;
+Terrain  = BuildEnvironment(BatDATA.AllParams.TerrainParams, BatDATA.AllParams.SimParams.xyResolution, BatDATA.AllParams.TerrainParams.Type);
+BATx     = BatDATA.BAT(BatNum);
+nTime    = BATx.TransmittedPulsesStruct(PulseNum).StartPulseTime;
+AllParams = BatDATA.AllParams;
+if PulseNum ~= 1
+    PrevManCmdSrtruct = BATx.ManueverCmdStruct(PulseNum-1);
+else
+    PrevManCmdSrtruct = BATx.ManueverCmdStruct(1);
+end
+
+% Consps
+if AllParams.SimParams.DetectConsps
+    ConspsLocStruct = BATx.Consps_FindsStruct(PulseNum);
+
+    ConspsLocStruct.NumOfTargets = numel(ConspsLocStruct.DetectedPreyNum);
+    ConspsLocStruct.TargetsID    = ConspsLocStruct.DetectedPreyNum;
+    ConspsLocStruct.TargetAngle  = ConspsLocStruct.Angles;
+    if isempty(ConspsLocStruct.Bat2TargetRelativeAngle)
+        ConspsLocStruct.Bat2TargetRelativeAngle = nan(1, ConspsLocStruct.NumOfTargets);
+    end % if isempty()
+else
+    ConspsLocStruct = BATx.OtherBatsPolarCoordinates(PulseNum);
+
+end % if AllParams.SimParams.DetectConsps
+
+tempManueverStage = BatManueverDecision( ...
+                            BATx.PreyFindsStruct(PulseNum) , BATx.ObsFindsStruct(PulseNum), ... % BATx.ObsInBeamStruct(CurrentPulseNum), ...
+                            ConspsLocStruct, BATx.BatVelocity(nTime),...
+                            PrevManCmdSrtruct, PulseNum, BATx, AllParams, Terrain, nTime, true);
+%% compare versions
+tempManueverStage2 = BatManueverDecision_verFeb08( ...
+                            BATx.PreyFindsStruct(PulseNum) , BATx.ObsFindsStruct(PulseNum), ... % BATx.ObsInBeamStruct(CurrentPulseNum), ...
+                            ConspsLocStruct, BATx.BatVelocity(nTime),...
+                            PrevManCmdSrtruct, PulseNum, BATx, AllParams, Terrain, nTime, false);
+%% 
+
+% ObsInBeamStruct = BATx.ObsInBeamStruct(PulseNum);
+% ObsFindsStruct.TransmittedPulseNum = PulseNum;
+% % ObsFindsStruct.DetectedTimes       = DetectedObsTimes;
+% ObsFindsStruct.xFinds              = ObsInBeamStruct.xOBSTC ;
+% ObsFindsStruct.yFinds              = ObsInBeamStruct.yOBSTC ;
+% ObsFindsStruct.Distances           = ObsInBeamStruct.Distances;
+% ObsFindsStruct.Angle2DetectedPrey  = ObsInBeamStruct.TargetAngle;
+% ObsFindsStruct.Angles              = ObsInBeamStruct.TargetAngle;
+% ObsFindsStruct.DetectedPreyNum     = 1:numel(ObsInBeamStruct.Distances);
+% 
+% FoundObstacles = ObsFindsStruct; 
+% 
+% ax = myObsacleManuverOnLineTest(nTime,BATx, 1, PulseNum, FoundObstacles, Terrain, ax );
+
+% tempManueverStage = BATx.ManueverCmdStruct(PulseNum+1).ManueverStage;
+% tempManueverType  =  BATx.ManueverCmdStruct(PulseNum+1).ManueverType;
+% title([tempManueverStage, tempManueverType])
+
+hold on
+% L = legend;
+nStart = BATx.TransmittedPulsesStruct(PulseNum).StartPulseTime;
+xyRes = AllParams.SimParams.xyResolution;
+% plot( BATx.ObsFindsStruct(PulseNum).xFinds *0.01, BATx.ObsFindsStruct(PulseNum).yFinds *0.01, 'o', 'color', colStruct.Terrain,    ...
+%     'LineWidth',1, 'MarkerSize', 6, 'DisplayName', 'curr detected')
+% 
+% New June2024 - deleted
+% xDetected = (BATx.xBati(nStart) + BATx.ObsFindsStruct(PulseNum).Distances.*cos(BATx.Teta(nStart) + ...
+%     BATx.ObsFindsStruct(PulseNum).Angles) )*xyRes;
+% yDetected = (BATx.yBati(nStart) + BATx.ObsFindsStruct(PulseNum).Distances.*sin(BATx.Teta(nStart) + ...
+%     BATx.ObsFindsStruct(PulseNum).Angles) )*xyRes;
+% plot(xDetected, yDetected, 's', 'MarkerFaceColor', colStruct.obsEstimate, ...
+%                 'MarkerEdgeColor', colStruct.obsEstimate, 'MarkerSize', 8, 'DisplayName', 'Detected Obs')
+
+%%% The masked obstacles
+[~, ix] = ismember(BATx.ObsFindsStruct(PulseNum).MaskedPreys, BATx.ObsInBeamStruct(PulseNum).DetectetedTargetsVec );
+xMasked = BATx.ObsInBeamStruct(PulseNum).xOBSTC(nonzeros(ix)) * xyRes;
+yMasked = BATx.ObsInBeamStruct(PulseNum).yOBSTC(nonzeros(ix)) * xyRes;
+plot(xMasked, yMasked, 'x', 'Linewidth', 2, 'MarkerSize', 8, 'Color', colStruct.masking, 'DisplayName', 'Masked Obs')
+
+%% add the postioins of cosnsp
+BAT = BatDATA.BAT;
+xyRes = AllParams.SimParams.xyResolution;
+
+nEnd = min(nStart + BATx.TransmittedPulsesStruct(PulseNum).IPItoNextPulse-1, numel(BAT(1).xBati) );
+for kBat = 1:AllParams.SimParams.TotalBatsNumber
+    if kBat~= BatNum
+        x1 = BAT(kBat).xBati(nStart)*xyRes; y1 = BAT(kBat).yBati(nStart)*xyRes;
+        x2 = BAT(kBat).xBati(nEnd)*xyRes; y2 = BAT(kBat).yBati(nEnd)*xyRes;
+        % plot(BAT(kBat).xBati(nStart)*xyRes , BAT(kBat).yBati(nStart)*xyRes, '*r', 'DisplayName','BatStart', 'MarkerSize', 6, 'LineWidth', 1.5)
+        % plot(BAT(kBat).xBati(nStart:nEnd)*xyRes , BAT(kBat).yBati(nStart:nEnd)*xyRes, '.-r', 'DisplayName','Consps', 'MarkerSize', 6)
+        quiver(x1, y1, x2-x1, y2-y1, '*r', 'MaxHeadSize', 0.5, 'LineWidth',2, 'DisplayName', 'Consp')
+    end % if
+end % for
+% L.String = L.String(~contains(L.String,'data'))
+
+% the Detections of Conpsps
+if AllParams.SimParams.DetectConsps
+    % 
+    % plot( BATx.Consps_FindsStruct(PulseNum).xFinds *0.01, BATx.Consps_FindsStruct(PulseNum).yFinds *0.01, 'o', ...
+    %     'color', colStruct.conspFinding, 'LineWidth', 2, 'MarkerSize', 4, 'DisplayName', 'curr detected')
+    plot( BATx.Consps_FindsStruct(PulseNum).xFindsEst *0.01, BATx.Consps_FindsStruct(PulseNum).yFindsEst *0.01, '*', ...
+        'MarkerFaceColor', colStruct.conspEstimate, 'MarkerEdgeColor', colStruct.conspEstimate, 'MarkerSize', 6, 'DisplayName', 'consp Estimated')
+    % the masking of the consps
+    maskedBats =  BATx.Consps_MaskingStruct(PulseNum).MaskedPreys;
+    for k = 1:numel(maskedBats)
+        plot(BAT(maskedBats(k)).xBati(nStart)*xyRes , BAT(maskedBats(k)).yBati(nStart)*xyRes, 'd', ...
+            'color', colStruct.masking, 'DisplayName','Jammed Bats', 'MarkerSize', 9, 'LineWidth', 1.5)
+    end % for k
+end % if AllParams.SimParams.DetectConsps
+
+%% Add the Position of the Prey
+PREY = BatDATA.PREY;
+
+for k = 1:AllParams.SimParams.TotalPreysNumber
+        plot(PREY(k).xPrey(nStart),      PREY(k).yPrey(nStart), '*', 'color', colStruct.PreysPos(k,:), 'DisplayName','preyStart', 'MarkerSize', 4, 'LineWidth', 1.5)
+        plot(PREY(k).xPrey(nStart:nEnd), PREY(k).yPrey(nStart:nEnd), '.-', 'color', colStruct.PreysPos(k,:), 'DisplayName','prey', 'MarkerSize', 2)
+end % for
+% 
+% the Detections of Prey
+plot( BATx.PreyFindsStruct(PulseNum).xFinds *0.01, BATx.PreyFindsStruct(PulseNum).yFinds *0.01, ...
+    'color', colStruct.preyFinding, 'LineWidth', 2, 'MarkerSize', 7, 'DisplayName', 'curr detected')
+
+
+PrevManCmdSrtruct = BATx.ManueverCmdStruct(PulseNum);
+directionCmd = BATx.Teta(nTime) + PrevManCmdSrtruct.Angle2HuntedPrey;
+% plot(ax, 0.01*(BATx.xBati(nTime) + [0, PrevManCmdSrtruct.Dist2HuntedPrey* cos(directionCmd)]) , ...
+%          0.01*(BATx.yBati(nTime) + [0, PrevManCmdSrtruct.Dist2HuntedPrey* sin(directionCmd)]), ...
+%     '--m', 'DisplayName','Direction Commnand', 'MarkerSize', 6, 'LineWidth', 1.5)
+%
+% ManueverCmdStruct = BatManueverDecision( ...
+%         BATx.PreyFindsStruct(PulseNum) , ObsFindsStruct, ... % ObsInBeamStruct(CurrentPulseNum), ...
+%         BATx.OtherBatsPolarCoordinates(PulseNum), BATx.BatVelocity(nTime),...
+%         PrevManCmdSrtruct, PulseNum, BATx, BatDATA.AllParams, Terrain, nTime);
+fig = gcf;
+set(fig, 'Units', 'normalized', 'OuterPosition', [0 0 1 1]);
+ylim([-2 12])
+xlim([-2 12])
+
+%% polar plot
+polarFlg = 0;
+if polarFlg
+    fig2 = figure; 
+    detIx = ismember(BATx.Consps_FindsStruct(PulseNum).DetecectedPreyWithOutInterference, BATx.Consps_FindsStruct(PulseNum).DetectedPreyNum)
+    polarscatter(...
+        BATx.Consps_FindsStruct(PulseNum).Angles, ...
+        BATx.Consps_FindsStruct(PulseNum).Distances, ...
+        30, ...
+        BATx.Consps_FindsStruct(PulseNum).RxPowerOfDetectedPreys(detIx), ...
+        'o','filled', DisplayName= 'Consps')
+    hold on
+
+    polarscatter(...
+        BATx.Consps_FindsStruct(PulseNum).Angles, ...
+        BATx.Consps_FindsStruct(PulseNum).Distances, ...
+        60, ...
+        BATx.Consps_FindsStruct(PulseNum).RxPowerOfDetectedPreys, ...
+        'd','filled', DisplayName= 'Prey')
+   fig2.Position(1) = fig2.Position(1) + 200;
+end
+end % function
+
