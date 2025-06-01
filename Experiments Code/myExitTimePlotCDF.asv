@@ -1,0 +1,15 @@
+figure; hold on;
+
+tt = TableCaveExitPkRm(TableCaveExitPkRm.BatSpecies == 'PK',:);
+ 
+nBats = unique(tt.NumberOfBats);
+c = lines(numel(nBats));
+for k = nBats'
+    histogram(TableCaveExitPkRm.ExitTimesSec(TableCaveExitPkRm.NumberOfBats == k),40, ...
+        'Normalization','cdf', 'DisplayStyle', 'stairs', 'LineWidth', 1.5, 'DisplayName', [num2str(k),'Bat'])
+end
+L = legend ('Location','southeast', '');
+grid on
+xlabel('Time (sec)')
+ylabel('Probabity')
+title('CDF of exit-time')

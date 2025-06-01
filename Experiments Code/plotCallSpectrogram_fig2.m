@@ -1,0 +1,117 @@
+TransmittedPulsesStruct.PulseNum = 1;
+TransmittedPulsesStruct.PulsePower = 10;
+TransmittedPulsesStruct.StartPulseTime = 0;
+TransmittedPulsesStruct.PulseWidth = 7; % 7 - RM, % 5 PK
+TransmittedPulsesStruct.ChirpMinMaxFreqs = [26 30]; % [26 30] - RM; % [39 74] PK  
+
+fs = 250e3;
+SampleTime = 0.0005;
+nSamples = ceil(TransmittedPulsesStruct.PulseWidth * fs * SampleTime);
+noise = 0.11;
+
+[chirpCall] = ReconstractAcousticCall(TransmittedPulsesStruct, fs, nSamples);
+
+chirpCall = chirpCall + noise;
+
+% add_noise segements at start and end
+t = 0:1/fs:10e-3;
+start_chirp = 1e-3*fs; % 1ms
+end_chirp = start_chirp+numel(chirpCall)-1;
+sig = noise*ones(numel(t),1);
+sig(start_chirp:end_chirp) = chirpCall;
+
+fig = figure;
+fig.Position([3,4]) = [300, 380]/2;
+plot(t, sig)
+
+winL = 512;
+n_fft = winL;
+
+spectrogram(sig, hann(winL), winL-1, winL, fs, 'yaxis');
+caxis([-40, -30]);        % Adjust intensity range (dB) for visibility
+cb = colorbar;
+cb.Visible = "off";
+ylim([20 80])
+ylabel('')
+yticklabels('')
+xlabel('')
+xticklabels('')
+sgtitle('')
+colormap jet
+
+%% STFT
+% Parameters
+fs = 250000;                % Sampling frequency in Hz
+duration = 0.006;           % Duration of the chirp in seconds (6 ms)
+t = linspace(0, duration, fs * duration); % Time vector
+
+% Generate the chirp signal
+f0 = 26000;                 % Start frequency (26 kHz)
+f1 = 29000;                 % End frequency (29 kHz)
+signal = chirp(t, f0, duration, f1, 'linear');
+
+% Spectrogram parameters
+window_length = 256;        % Short window length for better time resolution
+window = hann(window_length); % Hann window to minimize edge effects
+n_overlap = round(window_length * 0.75); % 75% overlap
+n_fft = 1024;               % Number of FFT points for sufficient frequency resolution
+
+% Generate the spectrogram
+figure;
+[s, f, t] = spectrogram(signal, window, n_overlap, n_fft, fs);
+
+% Convert frequency to kHz and time to ms for easier interpretation
+f_kHz = f / 1000;
+t_ms = t * 1000;
+
+% Plot the spectrogram
+imagesc(t_ms, f_kHz, 20*log10(abs(s)));
+axis xy;                    % Correct orientation of the axes
+colorbar;
+% colormap jet;
+
+% Customize the plot
+% ylim([26, 29]);             % Limit frequency range to 26–29 kHz
+title('Spectrogram of Synthetic Chirp');
+xlabel('Time (ms)');
+ylabel('Frequency (kHz)');
+caxis([-100 -20]);          % Adjust color scale for better visibility
+
+
+
+
+%% cwt
+% Parameters
+fs = 250000;                % Sampling frequency in Hz
+duration = 0.006;           % Duration of the chirp in seconds (6 ms)
+t = linspace(0, duration, fs * duration); % Time vector
+
+% Generate the chirp signal
+f0 = 30000;                 % Start frequency (26 kHz)
+f1 = 20000;                 % End frequency (29 kHz)
+signal = chirp(t, f0, duration, f1, 'linear');
+
+% Define wavelet parameters for CWT
+voicesPerOctave = 48;       % High voices per octave for finer frequency resolution
+waveletName = 'amor';       % Use Morlet (analytic Morlet wavelet) for chirp signals
+
+% Compute the CWT
+[wt, freq] = cwt(signal, waveletName, fs, 'VoicesPerOctave', voicesPerOctave);
+
+% Convert time and frequency scales
+t_ms = t * 1000;             % Convert time to milliseconds
+freq_kHz = freq / 1000;      % Convert frequency to kHz
+
+% Plot the Wavelet Transform as a spectrogram
+figure;
+imagesc(t_ms, freq_kHz, abs(wt));   % Plot magnitude of wavelet coefficients
+set(gca, 'YDir', 'normal');          % Ensure y-axis is right-side up
+colorbar;
+% colormap jet;
+
+% Customize the plot
+% ylim([26, 29]);              % Limit frequency range to 26–29 kHz
+title('Wavelet Spectrogram of Synthetic Chirp');
+xlabel('Time (ms)');
+ylabel('Frequency (kHz)');
+caxis([0 max(abs(wt(:)))]);   % Adjust color scale for better contrast
