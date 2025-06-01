@@ -1,0 +1,651 @@
+function [Masking2DetectionStruct, FilterBank_RxAll, FilterBank_RxWanted] = Interfernce2DetectedPreys_Acoustics( ...
+                        PulsePower, DetectedEchoesVec , CurrEchosStruct, Tx_Acoustic_Call, ...
+                        Rx_Acoustic_WantedSig,  Rx_Acoustic_Sig, PulseNum, BAT, BatNumRx, AllParams, FilterBank, ...
+                        debug_mode, DetectedObj, LPF_filt, FilterBank_RefCall, varargin)
+                    
+                  
+% %  [BAT(BatNum).FindsMaskingStruct ] = Interfernce2DetectedPreys( ...
+%                         DetectedPreysVec , CurrEchosFromPreyStruct, InterferenceDirectVec, ...
+%                         InterferenceFullVec,  InterferenceFullStruct, AllParams );
+%
+% Interfernce2DetectedPreys() returns a sturct of the masking to the
+% detected prey items including the loclization errors
+%  The function is for on-line analysis
+% Inputs-   PulsePower - the power of the current pulse [ dB ]
+%           DetectedPreysVec - a vector of the detectetd pry items at this
+%                   pulse
+%           CurrEchosFromPreyStruct - the echos from prey items at this
+%               pulse
+%           vectors of the direct and full interfernce from other bats (noise level if the is
+%               none)
+%           InterferenceFullStruct - a struct with whole the times freqs
+%               and powers of the interfernces pulses
+%               um - the current tx Pulse the that excited the echoes
+%           BAT- struct data of all Bats
+%           BatNumRx - the number of the reciveiving bat
+%           FilterBank : a struct of the parameters of the filter bank, FilterBank is empty if
+%           reciever is not 'FilterBank' 
+%           DetectedObj - {'Prey', 'Obs', 'Conspecific'}
+% Changed: 20Jan2021 - Swarm by omer
+%%%% NOV2021 - ACoutics ANALYSIS
+%%%% May2022 - Classify Targets
+%%%% Sep2022 - CaveExit2 and differnt detections
+
+%%%% June2024 - Confusion between own echoes and ehcoes from conspecifics calls
+% varagin: 'confusionFlag' - if the bat can discriminate baetween own echoes
+%                            and echoes from cons, the value is true (default)
+%          'echoTable'     - the table of the relavant echoes ecived bt the
+%                            bat. echoTable = BAT.echoesFullTable. NOTICE:
+%                            the table should be filtered outside for the
+%                            relevant echo-types.
+%       
+%% Input- Changed Jam Moth Apr2022
+if nargin < 12
+    debug_mode = 0;
+end
+
+if nargin < 13
+    DetectedObj = 'Prey';
+end
+
+% default params 
+confusionFlag = false; % default - bat can discriminate baetween own echoes and echoes from cons
+echoTable = table();
+
+if ~isempty(varargin)
+    if mod(numel(varargin), 2) ~= 0
+        warning('wrong input varargin')
+    else
+        % inParam = cell(numel(varargin),1);
+        for k = 1:2:numel(varargin)
+            % option 1
+            % inParam.varagin{k} = varagin{k+1};
+            % option 2
+            switch varargin{k}
+                case 'confusionFlag'
+                    confusionFlag = varargin{k+1};
+                        
+                case 'echoTable'
+                    echoTable = varargin{k+1};
+
+                otherwise
+                    disp('unkwnown input parameter')
+            end % switch
+        end % for k
+    end % if mod
+end % if ~isempty(varargin)
+%% 
+%%% START
+warning('off', 'signal:findpeaks:largeMinPeakHeight')
+
+%%% Parameters setup %%%
+% General Params
+SampleTime = AllParams.SimParams.SampleTime;
+NumberOfPreys = AllParams.SimParams.TotalPreysNumber; 
+NumOfSamples = AllParams.SimParams.SimulationTime / SampleTime + 1;
+% NumOfTransmittedPulses = BAT.NumOfTimesSonarTransmits;
+NoiseLevel = 10.^(AllParams.BatSonarParams.NoiseLeveldB/10);
+NoiseLeveldB = AllParams.BatSonarParams.NoiseLeveldB;
+
+% Detection Params
+
+DetectTH = AllParams.BatSonarParams.PulseDetectionTH;
+switch DetectedObj
+    case 'Prey'
+        detectMode         = 'envelope';
+        corrTH             = 10.^((DetectTH)/20) ;
+        PreyClassifierFlag = AllParams.BatSonarParams.PreyClassifierFlag;
+    case 'Obs'
+        detectMode         = 'none';
+        corrTH             = 10.^((DetectTH+5)/20);
+        PreyClassifierFlag = 0;
+    case 'Conspecific'
+        detectMode         = 'envelope';
+        corrTH             = 10.^((DetectTH)/20) ;
+        PreyClassifierFlag = 0;
+end % switch 
+
+MinSignal2InterfererTH = AllParams.BatSonarParams.Signal2InterferenceRatio; % dB 
+FwdMaskFlag            = AllParams.BatSonarParams.MaskingFwdFlag;
+FwdMaskingTime         = round( AllParams.BatSonarParams.MaskingFwdTime /1000 / SampleTime); % from msec to samples
+BckdMaskFlag           = AllParams.BatSonarParams.MaskingBckdFlag;
+BckdMaskingTime        = round( AllParams.BatSonarParams.MaskingBckdTime /1000 / SampleTime); % from msec to samples
+MaskingFwdSIRth        = AllParams.BatSonarParams.MaskingFwdSIRth; % dB
+MaskingBckdSIRth       = AllParams.BatSonarParams.MaskingBckdSIRth; % dB
+MaskingCorrelationTH   = AllParams.BatSonarParams.MaskingCorrelationTH; %dB
+
+MinTimeToDetectEcho = AllParams.BatSonarParams.MinTimeToDetectEcho /1000 / SampleTime; % from msec to samples
+
+%%%% Receiver Type
+ReceiverType = AllParams.BatSonarParams.ReceiverType;
+MaskingCorrelationTH = AllParams.BatSonarParams.MaskingCorrelationTH; %dB
+%     CorrelationTimeResolution = AllParams.BatSonarParams.CorrelationTimeResolution; % msec;
+CorrelationTimeResolution = AllParams.BatSonarParams.MaskingFwdTime;
+
+LocalizationErrFlag = AllParams.BatSonarParams.LocalizationErrFlag;  % move to all params ans GUI
+
+%%%% Acoustics Signals %%%%%
+% Nov2021
+FsAcoustic = AllParams.SimParams.FsAcoustic;
+
+FwdMasking_AcousTime = round( AllParams.BatSonarParams.MaskingFwdTime /1000 *FsAcoustic); % from msec to samples
+BwdMasking_AcousTime = round( AllParams.BatSonarParams.MaskingBckdTime /1000  *FsAcoustic); % from msec to samples
+MaskingFwd_AcousTH = 10^(AllParams.BatSonarParams.MaskingFwdSIRth/20); % dB
+MaskingBwd_AcousTH = 10^(AllParams.BatSonarParams.MaskingBckdSIRth/20); % dB
+
+%%% Init Some Paramters for the Clasiifier 
+% Jun2022 - OMER
+classifier_missed_targets    = [];
+classifier_jammed_targets    = [];
+direct_jammed_targets        = [];
+classifier_jammed_times      = [];
+FalseAlarmsClassified_nTimes = [];
+FalseAlarmsDistances         = [];
+FalseAlarmsDoa               = [];
+classifierResultsAll         = struct();
+DetectedCalissified_nTimes   = [];
+classifier_jammed_pks        = [];
+% Normalize the Call
+Tx_Acoustic_Call = Tx_Acoustic_Call/10^(PulsePower/20);
+% The Interference
+Rx_Acoustic_Interference = Rx_Acoustic_Sig - Rx_Acoustic_WantedSig + NoiseLevel*randn(size(Rx_Acoustic_Sig));
+
+%%% Pre- Detections of the echoes by RxLevle %%%%
+% Nov2021
+ix_detections = ismember(CurrEchosStruct.TargetIndex, DetectedEchoesVec);
+pre_detect_times = CurrEchosStruct.EchosTimes(ix_detections)*FsAcoustic*SampleTime;
+
+
+% Rx Level
+nDet = sum(ix_detections); % numel(DetectedEchoesVec);
+if nDet > 0
+    nfreq = numel(CurrEchosStruct.EchoDetailed(1).EchosFreqsFull);
+    det_max_rxlvl = max(reshape([CurrEchosStruct.EchoDetailed(ix_detections).EchoAttenuationFull], ...
+        nfreq, nDet ), [], 1 );
+    CurrentPick = 10*log10(det_max_rxlvl) + PulsePower; % the RX level of all detection (output: DetectedPreysRxPower)
+else %  if nDet > 0
+    CurrentPick = NoiseLeveldB;
+end % if nDet > 0
+
+% Tx time 
+TxnTime = BAT(BatNumRx).TransmittedPulsesStruct(PulseNum).StartPulseTime;
+
+%%% Pre-detection with confusion new June2024 %%%%%%
+% caclculate the follwing accordinf to the fullEchoes Tabale instaed of the CurrEchosStruct:
+% pre_detect_times, CurrentPick, DetectedEchoesVec 
+if confusionFlag
+    ixDet = echoTable.receivedLevel > 10.^(DetectTH/10);
+    pre_detect_times  = echoTable.time(ixDet);
+    pre_detect_times  = reshape(pre_detect_times, 1, []); % row-vector
+    
+    % the times in this function are reletive to the Tx-time, and in units of the high-frequency samples 
+    pre_detect_times  = (pre_detect_times - TxnTime*SampleTime)*FsAcoustic;
+    CurrentPick       = 10*log10(echoTable.receivedLevel(ixDet));
+    CurrentPick       = reshape(CurrentPick, 1, []); % row-vector
+    DetectedEchoesVec =  reshape(echoTable.targetIndex(ixDet), 1, []);  % taregt index is unique value for each rx signal 
+    detAngles         =  reshape(echoTable.directionOfArrival(ixDet), 1, []);  % taregt index is unique value for each rx signal  
+end % if confusionFlag
+
+% % % %%% Input DATA -
+
+FwdMaskingJamTimes = [];
+
+switch ReceiverType
+    
+    %%
+    case 'MaxPowerTH'   %  switch ReceiverType
+        % This receeveri is the refernce one
+        %             CurrentPick(k) = max(nEhchoPowers);
+        % Time cover Interference (both echo and direct)
+        IsPreyMaskedFlag(kEchoPrey)                  = RefIsPreyMaskedFlag(kEchoPrey);
+        IsCoverTimeJamFlag(kEchoPrey)                = RefIsCoverTimeJamFlag(kEchoPrey);
+        IsFwdMaskingJamFlag(kEchoPrey)               = RefIsFwdMaskingJamFlag(kEchoPrey);
+        CoverTimeJamTimes(kEchoPrey)                 = RefCoverTimeJamTimes(kEchoPrey);
+        FwdMaskingJamTimes(kEchoPrey)                = RefFwdMaskingJamTimes(kEchoPrey);
+        DetecetedPrey2InterferenceRatioDB(kEchoPrey) = RefDetecetedPrey2InterferenceRatioDB(kEchoPrey);
+        InterMinFreq = 0;
+        InterBW      = 0;
+        
+        %%% end case 'MaxPowerTH'
+        %%
+    case 'CorrelationDetector'           %  switch ReceiverType
+        %%% NOV2021
+        
+        %%% detection Params fo  Acoustics
+        if nDet > 0 
+             call_BW = 1e3*(CurrEchosStruct.EchoDetailed(1).EchosFreqsFull(1) - ...
+                CurrEchosStruct.EchoDetailed(1).EchosFreqsFull(end));
+            min_detect_res = 15e-6*FsAcoustic; % 50e-6; min(100,1/call_BW*FsAcoustic) ;% 1/BW
+            min_detect_res = max(min_detect_res, 3);
+        else
+            min_detect_res = 10; % 100;
+        end
+        PromTH = corrTH; % Prominance
+        time_tol = min_detect_res; % 0.1*1e-3* FsAcoustic; % resolution of peaks detection for comapring
+        
+        
+        %%%% The correlation (Normailzed to TxAcousticCAll length %%%%
+        %%% wanted echoes(i.e. Prey echoes) with the current call
+       
+            [ corsW, timesW, wanted_pks, wanted_pks_times ] = my_corr_receiver(Rx_Acoustic_WantedSig, Tx_Acoustic_Call, min_detect_res, corrTH, detectMode);
+        
+        %%% Comparing the wanted correlation to the pre-detections
+        [wanted_detected_times, wanted_detected_pks, detected_ix, time_diff_wanted] = ...
+            detections_compare(pre_detect_times, wanted_pks_times, wanted_pks, time_tol);
+        pre_detected_targets = DetectedEchoesVec(detected_ix);
+%         pre_detected_rxLvldB = CurrentPick(detected_ix); % changed 24/1/22. look for pre_detected_rxLvl
+        pre_undetected_targets = DetectedEchoesVec(~detected_ix);
+        
+        %%% All Echoes
+        [ corsA, timesA, all_pks, all_pks_times ] = my_corr_receiver(Rx_Acoustic_Sig, Tx_Acoustic_Call, min_detect_res, corrTH, detectMode);
+        
+        %%% Calucute the Correlation with the Interference Only
+        % % %                 Interference_corr_lvl =  envelope(corsA-corsW ,64,'analytic');
+%         Rx_Acoustic_Interference = Rx_Acoustic_Sig - Rx_Acoustic_WantedSig + NoiseLevel*randn(size(Rx_Acoustic_Sig));
+        % the correlation
+        [ int_cors, int_times, ~, ~ ] = my_corr_receiver(Rx_Acoustic_Interference, Tx_Acoustic_Call, min_detect_res, corrTH, detectMode);
+        int_cors = envelope(int_cors,64,'analytic');
+        
+        %%% Direct Jamming: Comparing All Detections and Wanted
+        
+        [all_detected_times, all_detected_pks, all_ix, time_diff_all] = ...
+            detections_compare(wanted_detected_times, all_pks_times, all_pks, time_tol);
+        %                 detected_targets = pre_detected_targets(all_ix);
+        jamm_flg = ~all_ix;
+        direct_jammed_targets = pre_detected_targets(jamm_flg);
+        direct_jammed_times = wanted_detected_times(jamm_flg);
+        direct_jammed_pks = wanted_detected_pks(jamm_flg);
+        
+        %% Test for BWD and FWD Masking And calcute SIR
+
+        [fbwd_jamm_flg, pre_detected_rxLvl, max_relevant_interference_level, max_relevant_cross_interference] = ...
+            Bwd_Fwd_Masking_Test(...
+            wanted_detected_times, wanted_detected_pks, ...
+            FwdMasking_AcousTime, BwdMasking_AcousTime, MaskingFwd_AcousTH, MaskingBwd_AcousTH, ...
+            Rx_Acoustic_WantedSig, Rx_Acoustic_Interference, int_cors);
+        
+        jamm_flg = jamm_flg | fbwd_jamm_flg;
+        
+        %%% Output Calc
+        % update the targets that were jammed by fwd or bwd masking
+        jammed_targets = pre_detected_targets(jamm_flg) ;
+%         detected_targets = pre_detected_targets(~jamm_flg);
+        jammed_times = wanted_detected_times(jamm_flg);
+%         time_diff_detected = time_diff_wanted(~jamm_flg); % for the localization range error
+        
+        IsPreyMaskedFlag = jamm_flg;
+        EchoSelfCorrealationMaxdB = 20*log10(wanted_detected_pks);
+        
+        Corr2MaskRatio = 10*log10(wanted_detected_pks./max_relevant_cross_interference);
+        EchoMaxInterCorrelationdB = 10*log10(max_relevant_cross_interference); % Change 24/1/2022
+        
+        DetecetedPrey2InterferenceRatioDB = 10*log10(abs(pre_detected_rxLvl ./ max_relevant_interference_level)); % changed 24/1/22
+        
+        MaskingTimes_Acoustics = TxnTime*FsAcoustic*SampleTime + jammed_times;
+        TotalMaskingTimes = round(MaskingTimes_Acoustics/(FsAcoustic*SampleTime));
+        
+        %%% end case 'CorrelationDetector'
+    
+        %%          %  switch ReceiverType
+    case 'FilterBank'
+        %%% Nov2021
+
+% CASE FILTERBANK
+         % detection of the signalby correlation
+        time_tol = 0.1*1e-3* FsAcoustic; % resolution of peaks detection for comapring
+        fb_flag = 1;
+%         fc  = FilterBank.filter_fc; % the center freqs of the filterbank 
+        %%% LPF
+        if ~exist('LPF_filt','var') 
+            f_lowpass= AllParams.BatSonarParams.FilterBank_LPF_Freq*1000; %         f_lowpass= 8*1000;
+            [LPF_filt.b_filt, LPF_filt.a_filt] = butter(6, f_lowpass/(FsAcoustic/2));
+        end % if ~exist('LPF_filt','var') 
+        
+        %%% Calculate the refence delays of the Call 
+        if ~exist('FilterBank_RefCall','var')
+            FilterBank_RefCall = FilterBank_Acous_Output(FilterBank, LPF_filt, Tx_Acoustic_Call, FsAcoustic, true);
+        end % if ~exist('FilterBank_RefCall','var')
+
+        %%% Wanted echoes(i.e. Prey echoes) %%%%
+        FilterBank_RxWanted = FilterBank_Acous_Output(FilterBank, LPF_filt, Rx_Acoustic_WantedSig, FsAcoustic, false, FilterBank_RefCall,'channel_detection', false, AllParams, DetectedObj);
+        wanted_pks = FilterBank_RxWanted.det_pks	;
+        wanted_pks_times = FilterBank_RxWanted.det_ipks	;
+%         corsW = FilterBank_RxWanted.Sum_ipks_hist;
+        
+% %         [ corsW, timesW, wanted_pks, wanted_pks_times ] = my_corr_receiver(Rx_Acoustic_WantedSig, Tx_Acoustic_Call, min_detect_res, corrTH, detectMode);
+        
+        %%% Comparing the wanted correlation to the pre-detections
+        [wanted_detected_times, wanted_detected_pks, detected_ix, time_diff_wanted] = ...
+            detections_compare(pre_detect_times, wanted_pks_times, wanted_pks, time_tol);
+        pre_detected_targets = DetectedEchoesVec(detected_ix);
+%         pre_detected_rxLvldB = CurrentPick(detected_ix); % changed 24/1/22. look for pre_detected_rxLvl
+        pre_undetected_targets = DetectedEchoesVec(~detected_ix);
+
+        %%% All Rx Signals %%%%
+        FilterBank_RxAll = FilterBank_Acous_Output(FilterBank, LPF_filt, Rx_Acoustic_Sig, FsAcoustic, false, FilterBank_RefCall, 'channel_detection', false, AllParams, DetectedObj);
+        
+        all_pks = FilterBank_RxAll.det_pks;
+        all_pks_times = FilterBank_RxAll.det_ipks;
+%         corsA = FilterBank_RxAll.Sum_ipks_hist;
+        
+        %%% Interference Only %%% - deleeted Sep2022
+%         FilterBank_RxInt = FilterBank_Acous_Output(FilterBank, LPF_filt, Rx_Acoustic_Interference, FsAcoustic, false, FilterBank_RefCall, 'channel_detection', false, AllParams, DetectedObj);
+%         
+%         int_pks = FilterBank_RxInt.det_pks;
+%         int_pks_times = FilterBank_RxInt.det_ipks;
+%         corsInt = FilterBank_RxInt.Sum_ipks_hist;
+%         int_cors = FilterBank_RxInt.Sum_out;
+%  
+%         Interference_corr_lvl = envelope(int_cors,64,'analytic');
+        
+        %%% Direct Jamming: Comparing All Detections and Wanted
+        
+        [all_detected_times, all_detected_pks, all_ix, time_diff_all] = ...
+            detections_compare(wanted_detected_times, all_pks_times, all_pks, time_tol);         
+        jamm_flg = ~all_ix;
+        
+        % for anlysis 
+        all_detected_targets  = pre_detected_targets(all_ix);
+        direct_jammed_targets = pre_detected_targets(jamm_flg);
+        direct_jammed_times = wanted_detected_times(jamm_flg);
+        direct_jammed_pks = wanted_detected_pks(jamm_flg);
+        
+        %% Test for BWD and FWD Masking And calcute SIR
+         % in FilterBank the fwd=bwd masking os 'built-in' - Applied only
+         % if no Classifier
+         % Change Sep2022 - Chnnel Detectoion
+
+             [all_times_match ] = ...
+                 detections_compare(wanted_pks_times, all_pks_times, all_pks, time_tol/2);
+             ixIntTimes = ~ismember(all_pks_times,all_times_match);
+             int_Lvl = all_pks(ixIntTimes);
+             int_Times = all_pks_times(ixIntTimes);
+             [fbwd_jamm_flg, pre_detected_rxLvl, max_relevant_interference_level, max_relevant_cross_interference] = ...
+                 Bwd_Fwd_Masking_Test(...
+                 wanted_detected_times, wanted_detected_pks, ...
+                 FwdMasking_AcousTime, BwdMasking_AcousTime, MaskingFwd_AcousTH, MaskingBwd_AcousTH, ...
+                 Rx_Acoustic_WantedSig, Rx_Acoustic_Interference, ...
+                 int_Lvl, fb_flag, int_Times);
+
+         %%%%%% Will Work Only on older versrion Bwd_Fwd_Masking_Test_verSep2022
+%         [fbwd_jamm_flg, pre_detected_rxLvl, max_relevant_interference_level, max_relevant_cross_interference] = ...
+%             Bwd_Fwd_Masking_Test_ver08Sep22(...
+%             wanted_detected_times, wanted_detected_pks, ...
+%             FwdMasking_AcousTime, BwdMasking_AcousTime, MaskingFwd_AcousTH, MaskingBwd_AcousTH, ...
+%             Rx_Acoustic_WantedSig, Rx_Acoustic_Interference, ...
+%             int_cors, fb_flag, FilterBank_RxWanted.Sum_out, int_pks_times);  
+        
+            %% classifier
+        %%% New MAy2022
+        %%% Calculate classifier reference Johnathan 9.3.22 - Omer 31may22
+
+        if ~PreyClassifierFlag
+            jamm_flg = jamm_flg | fbwd_jamm_flg;
+
+        else % calssifier
+            % hyper- parameters for classifier
+            tstart = 1e-3; % quiet time before the signal
+%             tend   = 1e-3; % quiet time after the signal = tstart
+            nstart = tstart * FsAcoustic;
+            
+            %%%% The Prey Signature Output for reference
+            sig_target = BAT(BatNumRx).TransmittedPulsesStruct(PulseNum).PreyAcousticSignature';
+            sig_target = padarray(sig_target, nstart)';
+            [FilterBank_target] = FilterBank_Acous_Output(FilterBank, LPF_filt, sig_target, FsAcoustic, 0, FilterBank_RefCall);
+            
+
+            %%% Test the Pre-detected  Before Masking (Pre detection and
+            %%% RxWanted
+            %%% co
+            nTimesToCheck = wanted_detected_times; %pre_detect_times; 
+            sig_echo = Rx_Acoustic_WantedSig;
+            try
+                [classifierTestVecWanted, classifierResultsWanted] = PreyClassifyFilterBank(sig_echo, FilterBank_RxWanted, ...
+                    nTimesToCheck, sig_target, FilterBank_target, tstart, FsAcoustic, FilterBank.filter_fc, 0);
+                
+%                 preDetectedClassified_nTimes = wanted_detected_times(classifierTestVecWanted);
+%                 preDetectedClassified_Pks    = wanted_detected_pks(classifierTestVecWanted);
+%                 classifier_success_targets   = pre_detected_targets(classifierTestVecWanted);
+                classifier_missed_targets    = pre_detected_targets(~classifierTestVecWanted);
+            catch
+                warning('OOOPS Classifier Wanted')
+            end % try
+
+            %%% Test classifier on Detections After Masking
+            nTimesToCheck = all_pks_times; %pre_detect_times; 
+            sig_echo = Rx_Acoustic_Sig;
+            try
+                [classifierTestVecAll, classifierResultsAll] = PreyClassifyFilterBank(sig_echo, FilterBank_RxAll, ...
+                    nTimesToCheck, sig_target, FilterBank_target, tstart, FsAcoustic, FilterBank.filter_fc, 0); % debug_mode
+
+                AllClassified_nTimes       = nTimesToCheck(classifierTestVecAll);
+                DetectedCalissified_nTimes = detections_compare(pre_detect_times, AllClassified_nTimes, [], time_tol);
+               
+                %%%% FalseAlarms        
+                FalseAlarmsClassified_nTimes = AllClassified_nTimes(~ismember(AllClassified_nTimes, DetectedCalissified_nTimes));
+                FalseAlarmsDistances         = 0.5 * FalseAlarmsClassified_nTimes * AllParams.SimParams.SoundV0 / AllParams.SimParams.xyResolution / FsAcoustic; % time_diff_detected
+                %%% Because we dont know the angle to masker we randomly choose from -45,+45 degrees, 
+                %%% To be fixed with DOA calculation 
+                FalseAlarmsDoa               = (2*(rand(size(FalseAlarmsDistances))>.5) - 1)*pi/4;
+            catch
+                warning('OOOPS Classifier All')
+            end % try
+            
+            %%%% Masking By Classifier
+            if ~isempty(all_detected_times)
+                det_ix = ismembertol(wanted_detected_times, AllClassified_nTimes, time_tol, 'DataScale', 1);
+
+                jamm_ClassifierFlag = ~det_ix & ~jamm_flg;
+%                 jamm_flg(classifierTestVecWanted) = jamm_flg(classifierTestVecWanted) | jamm_ClassifierFlag;
+                
+                classifier_jammed_targets = wanted_detected_times(jamm_ClassifierFlag);
+                classifier_jammed_times   = wanted_detected_times(jamm_ClassifierFlag);
+                classifier_jammed_pks     = wanted_detected_pks(jamm_ClassifierFlag); %  all_detected_pks
+                % update total jamm_flag
+                jamm_flg = jamm_flg | jamm_ClassifierFlag;
+               
+            end % if ~isempty(all_detected_times)
+            
+        end %  if PreyClassifierFlag
+
+        %%% Output 
+        jammed_targets = pre_detected_targets(jamm_flg) ;
+        jammed_times   = wanted_detected_times(jamm_flg);
+        
+        IsPreyMaskedFlag = jamm_flg;
+        %%%%% FOR THE FILTER-BANK this ratios in dB are not precise 
+        EchoSelfCorrealationMaxdB = 20*log10(wanted_detected_pks);
+        
+        Corr2MaskRatio = 20*log10(wanted_detected_pks./max_relevant_cross_interference);
+        EchoMaxInterCorrelationdB =  20*log10(max_relevant_cross_interference);
+        
+        DetecetedPrey2InterferenceRatioDB = 10*log10(abs( pre_detected_rxLvl ./ max_relevant_interference_level)); % Changed 24/1/22
+        
+        MaskingTimes_Acoustics = TxnTime*FsAcoustic*SampleTime + jammed_times;
+        TotalMaskingTimes = round(MaskingTimes_Acoustics/(FsAcoustic*SampleTime));
+        
+        %%
+    case 'TimeSequenceTH'  %  switch ReceiverType
+        % Init
+        FwdMaskingVec = zeros(1,FwdMaskingTime);
+        MaskingConv = ones(1,FwdMaskingTime+1);
+        
+        MinTime2Detect = min(MinTimeToDetectEcho, EchoDuration); % the required num of samples  for detection
+        
+        % the Detection Window
+        
+        ks = 1; % index for signal
+        
+        % init the prameters
+        IsDetected = zeros(1, length(nEchoTimes) - MinTime2Detect+1);
+        FwdS2I = zeros(1, length(nEchoTimes) - MinTime2Detect+1);
+        BwdS2I = zeros(1, length(nEchoTimes) - MinTime2Detect+1);
+        for km= nEchoTimes(1:end-MinTime2Detect+1)
+            SignalWindow = [ks: ks+ MinTime2Detect-1];
+            FwdWinnTimes= [max(1,km-FwdMaskingTime):km];
+            CoverWinnTimes = [km: min(km+MinTimeToDetectEcho-1, NumOfSamples) ];
+            % Check For Fwd Masking
+            % Signal2Interference
+            FwdS2I(ks) = max( nEhchoPowers(SignalWindow) ) - ...
+                max(AllInterPowerVec(FwdWinnTimes));
+            BwdS2I(ks) = max(nEhchoPowers(SignalWindow) ) - ...
+                max(AllInterPowerVec(CoverWinnTimes));
+            % Check for fwd Masking
+            IsFwdMaskFlag = FwdS2I(ks) <= MaskingFwdSIRth &...
+                AllInterPowerVec(km) >= NoiseLeveldB + MaskingFwdSIRth;
+            % Check for Bwd Masking
+            IsCoverMaskFlag =  BwdS2I(ks) <= MaskingBckdSIRth & ...
+                AllInterPowerVec(km) >= NoiseLeveldB + MaskingBckdSIRth ;
+            IsDetected(ks) = ~IsFwdMaskFlag & ~IsCoverMaskFlag;
+            
+            ks =ks+1;
+        end % for mm
+        
+        % Results
+        DetectedIDx = find(IsDetected);
+        IsPreyMaskedFlag(kEchoPrey) = isempty(DetectedIDx);
+        IsCoverTimeJamFlag(kEchoPrey) = IsPreyMaskedFlag(kEchoPrey); % No separation between  cover and FwdMasking
+        IsFwdMaskingJamFlag(kEchoPrey)= 0; % not relevant
+        CoverTimeJamTimes(kEchoPrey) =   IsPreyMaskedFlag(kEchoPrey)* nEchoTimes(1); % zero if no Interfernce
+        FwdMaskingJamTimes(kEchoPrey) = 0;
+        InterMinFreq =0;
+        InterBW = 0;
+        %SIR  =
+        if IsPreyMaskedFlag(kEchoPrey) % masked
+            DetecetedPrey2InterferenceRatioDB(kEchoPrey) = min([BwdS2I, FwdS2I]);
+        else % if IsPreyMaskedFlag(k)
+            DetecetedPrey2InterferenceRatioDB(kEchoPrey) = max([BwdS2I, FwdS2I]);
+        end %if IsPreyMaskedFlag(k)
+        
+        %%% end case 'TimeSequenceTH'
+        
+        %%
+        
+        %%% this reciever ignores the masking
+        %%
+    case 'NoMasking' %
+        IsPreyMaskedFlag(kEchoPrey) = 0;
+        IsCoverTimeJamFlag(kEchoPrey) = 0; % No separation between  cover and FwdMasking
+        IsFwdMaskingJamFlag(kEchoPrey)= 0; % not relevant
+        CoverTimeJamTimes(kEchoPrey) =  0; % zero if no Interfernce
+        FwdMaskingJamTimes(kEchoPrey) = 0;
+        DetecetedPrey2InterferenceRatioDB(kEchoPrey) = CurrentPick(kEchoPrey) - NoiseLeveldB;
+        InterMinFreq =0;
+        InterBW = 0;
+        %%% %%% end case 'NoMasking'
+        
+        %%
+end  % switch ReceiverType
+
+%%
+%%% Calculate lcalization error (DF, Distance, RElative pos)
+% CalculateLocalizationErros function nedees; the Rxpower, SIR, Angle,
+% Distance, TransmittedPulseTime
+
+%%%% Nov2021
+%Change - Acoustics- the range error is by  the correation Peak
+
+if LocalizationErrFlag
+%     [DFErr, RangeErr, RelativeDirectionErr] = CalculateLocalizationErrors(...
+%         BAT(BatNumRx), CurrEchosFromPreyStruct, DetectedPreysVec(detected_ix), ...
+%         DetecetedPrey2InterferenceRatioDB, CurrentPick(detected_ix), PulseNum, AllParams); 
+    
+ 
+    if ~confusionFlag
+        % without change
+        [DFErr, ~, RelativeDirectionErr] = CalculateLocalizationErrors(... % RangeErr is the 2nd output
+            BAT(BatNumRx), CurrEchosStruct, DetectedEchoesVec(detected_ix), ...
+            DetecetedPrey2InterferenceRatioDB, CurrentPick(detected_ix), PulseNum, AllParams);
+        RangeErr  = 0.5 * time_diff_wanted * AllParams.SimParams.SoundV0 / AllParams.SimParams.xyResolution / FsAcoustic; % time_diff_detected
+    else
+        %%% confusion new June2024 %%%%%%
+        SNR = min( CurrentPick(detected_ix), DetecetedPrey2InterferenceRatioDB);
+        DFErr = calcDFError(SNR, detAngles(detected_ix));
+        RangeErr  = 0.5 * time_diff_wanted * AllParams.SimParams.SoundV0 / AllParams.SimParams.xyResolution / FsAcoustic;
+        RelativeDirectionErr = nan(size(DFErr));
+    end % if ConfusionFlag
+    
+    %% New Max Error Allowed 2024
+    maxRangeErr = 10; % 10 cm
+    ixTrim = find(abs(RangeErr) > maxRangeErr);
+     if any(ixTrim)
+         RangeErr(ixTrim) = sign(RangeErr(ixTrim)).*maxRangeErr;
+     end
+else % if LocalizationErrFlag
+    DFErr =0;
+    RangeErr = 0;
+    RelativeDirectionErr = 0;
+end % if LocalizationErrFlag
+%%
+%%% OUTPUT
+%%% NOV2021
+CurrentPick = CurrentPick(detected_ix);
+% CurrentPick = CurrentPick(~jamm_flg);
+
+% TotalMaskingTimes = nonzeros(unique([CoverTimeJamTimes, FwdMaskingJamTimes]) )';
+RefTotalMaskingTimes = []; %  nonzeros(unique([RefCoverTimeJamTimes, RefFwdMaskingJamTimes]) )';
+
+IsAnyPreyMasked = any(IsPreyMaskedFlag) ;
+
+Masking2DetectionStruct = struct(...
+        'PulseNum', PulseNum, ...
+        'DetectedPreys', DetectedEchoesVec(detected_ix),... % only Targets that were detected by the corr and by the classifier
+        'DetectedPreysRxPower', CurrentPick, ...
+        'CorrelationMissedTargetd', pre_undetected_targets, ...
+        'IsAnyPreyMissedByCorr', ~isempty(pre_undetected_targets), ...
+        'IsAnyPreyMasked', IsAnyPreyMasked, ...
+        'MaskedPreys', jammed_targets, ... % nonzeros(jammed_targets), ...
+        'masked_prey_idx',[] , ...
+        'TotalMaskingTimes', TotalMaskingTimes,...
+        'AcousticMaskingTimes', MaskingTimes_Acoustics, ...
+        'IsCoverTimeJamFlag' , [],...
+        'CoverTimeJamTimes' , [], ...
+        'IsFwdMaskingJamFlag', [],...
+        'FwdMaskingJamTimes', [] ,...
+        'DetecetedPrey2InterferenceRatioDB', DetecetedPrey2InterferenceRatioDB, ...
+        'SelfCorrealationMaxdB', EchoSelfCorrealationMaxdB, ...
+        'InterCorrelationMaxdB', EchoMaxInterCorrelationdB, ...
+        'Ref_MaskedPreys', [],  ...
+        'Ref_TotalMaskingTimes', [], ...
+        'Ref_FwdMaskingJamTimes', [], ...
+        'Ref_DetecetedPrey2InterferenceRatioDB', [],...
+        'DetectionsDFerror', DFErr,...
+        'DetectionsRangeErr', RangeErr,...
+        'DetectionsRelativeDirectionErr', RelativeDirectionErr, ...
+        'InterMinFreq', [], ...
+        'InterBW',   [], ...
+        'InterBatNum', [], ...
+        'FB_unmasked_prey', [], ...
+        'FB_unmasked_delays', [], ...
+        'FB_unmasked_times',[], ...
+        'FB_detected_masking_delays', [], ...
+        'FB_detected_masking_powers', [] , ...
+        'FB_detected_Prey_times', [] , ...
+        'FB_estimated_masker', [] ,...
+        'ClassifierMissedTargets', classifier_missed_targets, ...
+        'ClassifierMaskedTargets', classifier_jammed_targets , ...
+        'DetectionMaskedTargets', direct_jammed_targets, ...
+        'ClassifierMaskedTimes', classifier_jammed_times ,...
+        'ClassifierFalseAlarmsTimes', FalseAlarmsClassified_nTimes ,...
+        'ClassifierFalseAlarmsDistances', FalseAlarmsDistances ,...
+        'ClassifierFalseAlarmsDOA', FalseAlarmsDoa ,...
+        'ClassifierDetecdtedAndTRUE', DetectedCalissified_nTimes, ...
+        'ClassifierFullResults',  classifierResultsAll ...        
+        );
+    
+    
+    %%% DEBUG - Plot all Dtections for BatNum #1
+%         debug_mode = false; %false; %true;
+        
+        if debug_mode % && BatNumRx == 1 % || BatNumRx == 2)
+            Acoustic_corr_reciever_Analyze
+            BatDATA.BAT = BAT;
+            BatDATA.AllParams =  AllParams;
+            myFilterBankResponsePlot( Rx_Acoustic_Sig, FilterBank_RxAll, FilterBank, FsAcoustic, BatDATA, BatNumRx, PulseNum )
+%             myClassifierResultsPlot(Masking2DetectionStruct)
+        end % if debug_mode & BatNumRx == 1
+    
+end % function
+
+%%% End of main function %%%%%
+
