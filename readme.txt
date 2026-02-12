@@ -1,4 +1,27 @@
-BatModel– Readme (May 2025)
+Colony Exit Bat Simulation
+
+This repository contains the simulation code used in:
+
+Mazar, O. et al. (2026)
+Agent-based modeling reveals how bats navigate dense group emergences
+eLife
+eLife2026;14:RP105571 DOI: https://doi.org/10.7554/eLife.105571.4
+
+Description
+
+This repository contains the code used to simulate collective navigation dynamics during bat colony emergence.
+
+License
+
+This project is licensed under the MIT License â€“ see the LICENSE file for details.
+
+Data Availability
+
+The dataset associated with this project is available at Zenodo:
+https://doi.org/10.5281/zenodo.16992617
+
+
+
 This guide explains how to run and modify the bat navigation simulation described in the article using the accompanying MATLAB GUI. 
 
 Refer to 'BatModel_readme.pdf' or 'BatModel_readme.docx' for additional details and visual illustrations.
@@ -7,8 +30,8 @@ Refer to 'BatModel_readme.pdf' or 'BatModel_readme.docx' for additional details 
 1.1. Extract the contents of the .rar archive to a local folder (e.g., C:\BatModel\).
 
 2. Launch the MATLAB GUI
-2.1. Open MATLAB®.
-2.2. In the Command Window, set the current path to the folder where the files were extracted: (e.g., cd(‘c:\BatModel\’)
+2.1. Open MATLABÂ®.
+2.2. In the Command Window, set the current path to the folder where the files were extracted: (e.g., cd(â€˜c:\BatModel\â€™)
 2.3. Run the GUI by typing: BatGUI1
 2.4. A Graphical User Interface that controls and executes the simulation will be opened:
 
@@ -25,7 +48,7 @@ Refer to 'BatModel_readme.pdf' or 'BatModel_readme.docx' for additional details 
 
 4. GUI Parameter Settings 
 4.1. Main Parameters (2)
-4.1.1. Set the number of bats (1–20) and prey items (use zero for cave exit simulations).
+4.1.1. Set the number of bats (1â€“20) and prey items (use zero for cave exit simulations).
 4.1.2. Define the total simulation time (default = 15 seconds).
 4.1.3. Leave other settings unchanged unless specifically needed.
 
@@ -52,27 +75,28 @@ Refer to 'BatModel_readme.pdf' or 'BatModel_readme.docx' for additional details 
 5.2. Advanced Analysis (8)
 5.2.1. Acoustics Rx: Visualizes received signals of the selected bat over time (signal type by color). 
 5.2.2. Analyze Call: 
-Analyze Rx / Analyze Man: Examine specific calls, their detections, and the bat’s behavioral decisions during those calls.
+Analyze Rx / Analyze Man: Examine specific calls, their detections, and the batâ€™s behavioral decisions during those calls.
 
 6. Output Data for Analysis
 6.1. Simulation results are stored in the BatDATA structure. Use Send to WS to export data to the MATLAB workspace or save/load .mat files.
 6.2. BatDATA consists the following fields:
 BatDATA = struct with fields:
-                       	PREY: [1×(number_of_prey_items) struct]
-                        	BAT: [1×( number_of_bats) struct]
-                  	AllParams: [1×1 struct]
-  		FlightInterferceSummary: [1×1 struct]
-              		FilterBank: [1×1 struct]
+                       	PREY: [1Ã—(number_of_prey_items) struct]
+                        	BAT: [1Ã—( number_of_bats) struct]
+                  	AllParams: [1Ã—1 struct]
+  		FlightInterferceSummary: [1Ã—1 struct]
+              		FilterBank: [1Ã—1 struct]
+
 6.3. Main fields in BatDATA to analyze:
-6.3.1. BatDATA.AllParams – All parameter values for the simulation
-6.3.2. BatDATA.FlightInterferceSummary – Summary of masking and jamming events.
-6.3.3. BatDATA. BAT(x). InterReportStrctOnLine – Per-bat trajectory and detection details.
+6.3.1. BatDATA.AllParams â€“ All parameter values for the simulation
+6.3.2. BatDATA.FlightInterferceSummary â€“ Summary of masking and jamming events.
+6.3.3. BatDATA. BAT(x). InterReportStrctOnLine â€“ Per-bat trajectory and detection details.
 
 7. Core Files and Examples
-7.1.1. BatGUI1.m – Main GUI launcher.
-7.1.2. BatFlightForGui.m – Core simulation function.
-7.1.3. \DATA\ DefaultParamsTable_CaveExit_FInal_PK.xlsx – Default parameter file.
-7.1.4. \BatDATA_output\ BatData_.mat – Example of simulation output 
+7.1.1. BatGUI1.m â€“ Main GUI launcher.
+7.1.2. BatFlightForGui.m â€“ Core simulation function.
+7.1.3. \DATA\ DefaultParamsTable_CaveExit_FInal_PK.xlsx â€“ Default parameter file.
+7.1.4. \BatDATA_output\ BatData_.mat â€“ Example of simulation output 
 7.1.5. \Experiments Code\*.m - Batch-run examples and automated testing scripts.
 
 
@@ -80,5 +104,6 @@ Contact
 Omer Mazar
 Omer_mazar@yahoo.com
 Updated: May 2025
+
 
 
